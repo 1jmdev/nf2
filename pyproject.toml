@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nf2"
+version = "0.1.0"
+description = "NormalFloat 2-bit quantization with LoRA KL recovery for Hugging Face models"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.2",
+    "transformers>=4.45",
+    "datasets>=2.20",
+    "accelerate>=0.33",
+    "safetensors>=0.4.3",
+    "tqdm>=4.66",
+]
+
+[project.scripts]
+nf2 = "nf2.cli:main"
+
+[tool.setuptools]
+packages = ["nf2"]
