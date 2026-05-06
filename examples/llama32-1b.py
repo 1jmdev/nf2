@@ -36,6 +36,7 @@ def recover(args: argparse.Namespace) -> None:
         lora_rank=args.lora_rank,
         lora_alpha=args.lora_alpha,
         learning_rate=args.learning_rate,
+        scale_offset_learning_rate=args.scale_offset_learning_rate,
         top_k=args.top_k,
         ce_weight=args.ce_weight,
         refine_scale_offset=args.refine_scale_offset,
@@ -104,6 +105,7 @@ def main() -> None:
     r.add_argument("--batch-size", type=int, default=1)
     r.add_argument("--max-steps", type=int, default=1000)
     r.add_argument("--learning-rate", type=float, default=2e-4)
+    r.add_argument("--scale-offset-learning-rate", type=float, default=1e-6)
     r.add_argument("--lora-rank", type=int, default=8)
     r.add_argument("--lora-alpha", type=float, default=16.0)
     r.add_argument("--top-k", type=int, default=256)

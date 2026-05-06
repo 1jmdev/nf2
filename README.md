@@ -86,11 +86,10 @@ python examples/llama32-1b.py recover \
   --lora-rank 16 \
   --lora-alpha 32 \
   --top-k 256 \
-  --ce-weight 0.1 \
-  --refine-scale-offset
+  --ce-weight 0.1
 ```
 
-`--refine-scale-offset` keeps the 2-bit indices frozen but lets the per-block scale and offset adapt during recovery. This is still full NF2: no transformer projection layers are kept in BF16, and only `lm_head` is skipped by default.
+Optional: add `--refine-scale-offset --scale-offset-learning-rate 1e-6` after the LoRA-only run is stable. This keeps the 2-bit indices frozen but lets the per-block scale and offset adapt with a much smaller LR than LoRA. This is still full NF2: no transformer projection layers are kept in BF16, and only `lm_head` is skipped by default.
 
 For a quick smoke run, use fewer bytes and steps:
 

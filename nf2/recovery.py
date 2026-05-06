@@ -24,6 +24,7 @@ class RecoveryConfig:
     batch_size: int = 1
     max_steps: int = 1000
     learning_rate: float = 2e-4
+    scale_offset_learning_rate: float = 1e-6
     lora_rank: int = 8
     lora_alpha: float = 16.0
     lora_dropout: float = 0.0
@@ -48,9 +49,15 @@ def _kl_distill_loss(
     vocab = teacher.shape[-1]
     if top_k and 0 < top_k < vocab:
         teacher_top = torch.topk(teacher, k=top_k, dim=-1)
-        target = F.softmax(teacher_top.values / temperature, dim=-1)
-        student_top = torch.gather(student, dim=-1, index=teacher_top.indices)
-        kl = F.kl_div(F.log_softmax(student_top / temperature, dim=-1), target, reduction="batchmean")
+        teacher_probs = F.softmax(teacher / temperature, dim=-1)
+        student_probs = F.softmax(student / temperature, dim=-1)
+        target_top = torch.gather(teacher_probs, dim=-1, index=teacher_top.indices)
+        student_top = torch.gather(student_probs, dim=-1, index=teacher_top.indices)
+        target_other = (1.0 - target_top.sum(dim=-1, keepdim=True)).clamp_min(1e-8)
+        student_other = (1.0 - student_top.sum(dim=-1, keepdim=True)).clamp_min(1e-8)
+        target = torch.cat([target_top, target_other], dim=-1).clamp_min(1e-8)
+        student_dist = torch.cat([student_top, student_other], dim=-1).clamp_min(1e-8)
+        kl = F.kl_div(student_dist.log(), target, reduction="batchmean")
         kl = kl * (temperature**2) / max(1, student.shape[1])
     else:
         kl = F.kl_div(
@@ -97,8 +104,22 @@ def run_recovery_ft(
     for param in teacher.parameters():
         param.requires_grad_(False)
 
-    trainable = [p for p in student_model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(trainable, lr=config.learning_rate)
+    lora_params = []
+    scale_offset_params = []
+    for name, param in student_model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if name.endswith("scale") or name.endswith("offset"):
+            scale_offset_params.append(param)
+        else:
+            lora_params.append(param)
+    param_groups = []
+    if lora_params:
+        param_groups.append({"params": lora_params, "lr": config.learning_rate})
+    if scale_offset_params:
+        param_groups.append({"params": scale_offset_params, "lr": config.scale_offset_learning_rate, "weight_decay": 0.0})
+    trainable = lora_params + scale_offset_params
+    optimizer = torch.optim.AdamW(param_groups)
     texts = load_text_samples(
         config.dataset_name,
         config.dataset_config,
