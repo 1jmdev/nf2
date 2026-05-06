@@ -28,17 +28,42 @@ class RecoveryConfig:
     lora_alpha: float = 16.0
     lora_dropout: float = 0.0
     temperature: float = 1.0
+    top_k: int = 256
+    ce_weight: float = 0.1
     refine_scale_offset: bool = False
     dtype: str = "bfloat16"
     grad_clip: float = 1.0
     save_adapter_path: str | None = None
 
 
-def _kl_distill_loss(student_logits: torch.Tensor, teacher_logits: torch.Tensor, temperature: float) -> torch.Tensor:
-    s = student_logits[:, :-1, :].float() / temperature
-    t = teacher_logits[:, :-1, :].float() / temperature
-    loss = F.kl_div(F.log_softmax(s, dim=-1), F.softmax(t, dim=-1), reduction="batchmean")
-    return loss * (temperature**2) / max(1, s.shape[1])
+def _kl_distill_loss(
+    student_logits: torch.Tensor,
+    teacher_logits: torch.Tensor,
+    temperature: float,
+    top_k: int = 256,
+    ce_weight: float = 0.1,
+) -> torch.Tensor:
+    student = student_logits[:, :-1, :].float()
+    teacher = teacher_logits[:, :-1, :].float()
+    vocab = teacher.shape[-1]
+    if top_k and 0 < top_k < vocab:
+        teacher_top = torch.topk(teacher, k=top_k, dim=-1)
+        target = F.softmax(teacher_top.values / temperature, dim=-1)
+        student_top = torch.gather(student, dim=-1, index=teacher_top.indices)
+        kl = F.kl_div(F.log_softmax(student_top / temperature, dim=-1), target, reduction="batchmean")
+        kl = kl * (temperature**2) / max(1, student.shape[1])
+    else:
+        kl = F.kl_div(
+            F.log_softmax(student / temperature, dim=-1),
+            F.softmax(teacher / temperature, dim=-1),
+            reduction="batchmean",
+        )
+        kl = kl * (temperature**2) / max(1, student.shape[1])
+    if ce_weight <= 0:
+        return kl
+    hard_targets = teacher.argmax(dim=-1)
+    ce = F.cross_entropy(student.reshape(-1, student.shape[-1]), hard_targets.reshape(-1))
+    return kl + ce * ce_weight
 
 
 def run_recovery_ft(
@@ -96,7 +121,7 @@ def run_recovery_ft(
         with torch.no_grad():
             teacher_logits = teacher(**batch, use_cache=False).logits
         student_logits = student_model(**batch, use_cache=False).logits
-        loss = _kl_distill_loss(student_logits, teacher_logits, config.temperature)
+        loss = _kl_distill_loss(student_logits, teacher_logits, config.temperature, config.top_k, config.ce_weight)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         if config.grad_clip > 0:

@@ -37,6 +37,7 @@ def convert_model_to_nf2(
     model: nn.Module,
     config: NF2Config | None = None,
     skip_modules: tuple[str, ...] = ("lm_head",),
+    skip_suffixes: tuple[str, ...] = (),
 ) -> list[str]:
     """Replace Linear layers in a Hugging Face model with NF2Linear layers in-place."""
 
@@ -47,6 +48,8 @@ def convert_model_to_nf2(
         if not isinstance(module, nn.Linear):
             continue
         if any(name == skip or name.startswith(skip + ".") for skip in skip_modules):
+            continue
+        if any(name.endswith(suffix) for suffix in skip_suffixes):
             continue
         targets.append((name, module))
     for name, module in targets:

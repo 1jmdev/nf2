@@ -21,7 +21,12 @@ def _convert(args: argparse.Namespace) -> None:
         trust_remote_code=args.trust_remote_code,
     )
     config = NF2Config(block_size=args.block_size, base_model_id=args.model_id, transformers_dtype=args.dtype)
-    converted = convert_model_to_nf2(model, config=config, skip_modules=tuple(args.skip_module))
+    converted = convert_model_to_nf2(
+        model,
+        config=config,
+        skip_modules=tuple(args.skip_module),
+        skip_suffixes=tuple(args.skip_suffix),
+    )
     save_nf2_model(model, tokenizer, args.output_dir, config, converted)
     print(f"Converted {len(converted)} Linear layers to NF2 and saved to {args.output_dir}")
 
@@ -43,6 +48,8 @@ def _recover(args: argparse.Namespace) -> None:
         learning_rate=args.learning_rate,
         lora_rank=args.lora_rank,
         lora_alpha=args.lora_alpha,
+        top_k=args.top_k,
+        ce_weight=args.ce_weight,
         save_adapter_path=args.save_adapter_path,
         dtype=args.dtype,
     )
@@ -64,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--device-map", default="auto")
     c.add_argument("--block-size", type=int, default=64)
     c.add_argument("--skip-module", action="append", default=["lm_head"])
+    c.add_argument("--skip-suffix", action="append", default=[])
     c.add_argument("--trust-remote-code", action="store_true")
     c.set_defaults(func=_convert)
 
@@ -93,6 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--learning-rate", type=float, default=2e-4)
     r.add_argument("--lora-rank", type=int, default=8)
     r.add_argument("--lora-alpha", type=float, default=16.0)
+    r.add_argument("--top-k", type=int, default=256)
+    r.add_argument("--ce-weight", type=float, default=0.1)
     r.add_argument("--save-adapter-path")
     r.add_argument("--trust-remote-code", action="store_true")
     r.set_defaults(func=_recover)
