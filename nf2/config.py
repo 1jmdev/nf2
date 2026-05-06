@@ -13,7 +13,7 @@ class NF2Config:
     block_size: int = 64
     scale_dtype: str = "float16"
     offset_dtype: str = "float16"
-    codebook: tuple[float, float, float, float] = (-1.271, -0.324, 0.324, 1.271)
+    codebook: tuple[float, float, float, float] = (-1.0, -0.254917, 0.254917, 1.0)
     quantize_embeddings: bool = False
     target_module_types: tuple[str, ...] = ("Linear",)
     base_model_id: str | None = None

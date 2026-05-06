@@ -4,7 +4,9 @@ import math
 
 import torch
 
-NF2_CODEBOOK = torch.tensor([-1.271, -0.324, 0.324, 1.271], dtype=torch.float32)
+# Quartile conditional means of N(0, 1), normalized by absmax so block values
+# reconstructed after absmax scaling cannot overshoot the original block range.
+NF2_CODEBOOK = torch.tensor([-1.0, -0.254917, 0.254917, 1.0], dtype=torch.float32)
 
 
 def pack_2bit(indices: torch.Tensor) -> torch.Tensor:

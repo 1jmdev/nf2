@@ -8,7 +8,7 @@ from torch import nn
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from .config import NF2Config
-from .modules import NF2Linear, NF2LoRALinear
+from .modules import NF2Linear, NF2LoRALinear, iter_top_level_nf2_modules
 
 
 def dtype_from_name(name: str) -> torch.dtype:
@@ -66,7 +66,7 @@ def save_nf2_model(model: nn.Module, tokenizer, output_dir: str | Path, config: 
     lora_modules = {}
     if converted is None:
         converted = []
-        for name, module in model.named_modules():
+        for name, module in iter_top_level_nf2_modules(model):
             if isinstance(module, NF2LoRALinear):
                 converted.append(name)
                 lora_modules[name] = {"rank": module.rank, "alpha": module.alpha}
@@ -97,7 +97,7 @@ def load_nf2_model(
     base_model_id = metadata.get("base_model_id") or nf2_config.base_model_id or str(model_dir)
     torch_dtype = dtype if isinstance(dtype, torch.dtype) else dtype_from_name(dtype or nf2_config.transformers_dtype)
     hf_config = AutoConfig.from_pretrained(base_model_id, trust_remote_code=trust_remote_code)
-    model = AutoModelForCausalLM.from_config(hf_config, torch_dtype=torch_dtype, trust_remote_code=trust_remote_code)
+    model = AutoModelForCausalLM.from_config(hf_config, dtype=torch_dtype, trust_remote_code=trust_remote_code)
     state = torch.load(model_dir / "nf2_model.pt", map_location="cpu")
     converted = metadata.get("converted_modules") or []
     lora_modules = metadata.get("lora_modules") or {}

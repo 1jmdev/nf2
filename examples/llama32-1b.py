@@ -14,7 +14,7 @@ MODEL_ID = "meta-llama/Llama-3.2-1B"
 def convert(args: argparse.Namespace) -> None:
     dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float16
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
-    model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=dtype, device_map=args.device_map)
+    model = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=dtype, device_map=args.device_map)
     config = NF2Config(block_size=args.block_size, base_model_id=args.model_id, transformers_dtype=args.dtype)
     converted = convert_model_to_nf2(model, config=config, skip_modules=("lm_head",))
     save_nf2_model(model, tokenizer, args.output_dir, config, converted)

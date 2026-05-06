@@ -141,6 +141,14 @@ def merge_lora_state(model: nn.Module) -> dict[str, torch.Tensor]:
     return {name: tensor.detach().cpu() for name, tensor in model.state_dict().items() if "lora_" in name}
 
 
+def iter_top_level_nf2_modules(model: nn.Module):
+    for name, module in model.named_modules():
+        if isinstance(module, NF2LoRALinear):
+            yield name, module
+        elif isinstance(module, NF2Linear) and not name.endswith(".base"):
+            yield name, module
+
+
 def freeze_non_lora(model: nn.Module) -> None:
     for name, param in model.named_parameters():
         param.requires_grad_("lora_" in name)

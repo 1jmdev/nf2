@@ -63,7 +63,7 @@ def run_recovery_ft(
 
     teacher = AutoModelForCausalLM.from_pretrained(
         teacher_model_id,
-        torch_dtype=dtype,
+        dtype=dtype,
         device_map=None,
         trust_remote_code=trust_remote_code,
     ).to(device)

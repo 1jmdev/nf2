@@ -16,7 +16,7 @@ def _convert(args: argparse.Namespace) -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=args.trust_remote_code)
     model = AutoModelForCausalLM.from_pretrained(
         args.model_id,
-        torch_dtype=dtype,
+        dtype=dtype,
         device_map=args.device_map,
         trust_remote_code=args.trust_remote_code,
     )
