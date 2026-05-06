@@ -10,11 +10,11 @@ from typing import Literal
 class NF2Config:
     """Configuration for scalar NF2 block quantization."""
 
-    block_size: int = 64
+    block_size: int = 16
     scale_dtype: str = "float16"
     offset_dtype: str = "float16"
     codebook: tuple[float, float, float, float] = (-1.271, -0.324, 0.324, 1.271)
-    quant_iters: int = 3
+    quant_iters: int = 5
     quantize_embeddings: bool = False
     target_module_types: tuple[str, ...] = ("Linear",)
     base_model_id: str | None = None

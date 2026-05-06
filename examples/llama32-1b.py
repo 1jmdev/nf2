@@ -11,27 +11,17 @@ from nf2 import NF2Config, RecoveryConfig, convert_model_to_nf2, generate_text, 
 MODEL_ID = "meta-llama/Llama-3.2-1B"
 
 
-def quality_skip_suffixes(preset: str) -> tuple[str, ...]:
-    if preset == "nf2":
-        return ()
-    if preset == "balanced":
-        return ("o_proj", "down_proj")
-    if preset == "high":
-        return ("q_proj", "k_proj", "v_proj", "o_proj", "down_proj")
-    raise ValueError(f"Unknown quality preset: {preset}")
-
-
 def convert(args: argparse.Namespace) -> None:
     dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float16
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
     model = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=dtype, device_map=args.device_map)
-    config = NF2Config(block_size=args.block_size, base_model_id=args.model_id, transformers_dtype=args.dtype)
-    converted = convert_model_to_nf2(
-        model,
-        config=config,
-        skip_modules=("lm_head",),
-        skip_suffixes=quality_skip_suffixes(args.quality_preset),
+    config = NF2Config(
+        block_size=args.block_size,
+        quant_iters=args.quant_iters,
+        base_model_id=args.model_id,
+        transformers_dtype=args.dtype,
     )
+    converted = convert_model_to_nf2(model, config=config, skip_modules=("lm_head",))
     save_nf2_model(model, tokenizer, args.output_dir, config, converted)
     print(f"Saved NF2 checkpoint with {len(converted)} converted layers: {args.output_dir}")
 
@@ -48,6 +38,7 @@ def recover(args: argparse.Namespace) -> None:
         learning_rate=args.learning_rate,
         top_k=args.top_k,
         ce_weight=args.ce_weight,
+        refine_scale_offset=args.refine_scale_offset,
         save_adapter_path=args.adapter_path,
         dtype=args.dtype,
     )
@@ -97,8 +88,8 @@ def main() -> None:
     c.add_argument("--output-dir", default="outputs/llama32-1b-nf2")
     c.add_argument("--dtype", choices=["bfloat16", "float16"], default="bfloat16")
     c.add_argument("--device-map", default="auto")
-    c.add_argument("--block-size", type=int, default=64)
-    c.add_argument("--quality-preset", choices=["nf2", "balanced", "high"], default="nf2")
+    c.add_argument("--block-size", type=int, default=16)
+    c.add_argument("--quant-iters", type=int, default=5)
     c.set_defaults(func=convert)
 
     r = sub.add_parser("recover")
@@ -117,6 +108,7 @@ def main() -> None:
     r.add_argument("--lora-alpha", type=float, default=16.0)
     r.add_argument("--top-k", type=int, default=256)
     r.add_argument("--ce-weight", type=float, default=0.1)
+    r.add_argument("--refine-scale-offset", action="store_true")
     r.set_defaults(func=recover)
 
     g = sub.add_parser("generate")

@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM
 
 from .convert import dtype_from_name
 from .data import load_text_samples, token_batches
-from .modules import add_lora_adapters, freeze_non_lora, merge_lora_state
+from .modules import NF2Linear, add_lora_adapters, freeze_non_lora, merge_lora_state
 
 
 @dataclass(slots=True)
@@ -82,9 +82,10 @@ def run_recovery_ft(
     add_lora_adapters(student_model, rank=config.lora_rank, alpha=config.lora_alpha, dropout=config.lora_dropout)
     freeze_non_lora(student_model)
     if config.refine_scale_offset:
-        for name, param in student_model.named_parameters():
-            if name.endswith("scale") or name.endswith("offset"):
-                param.requires_grad_(True)
+        for module in student_model.modules():
+            if isinstance(module, NF2Linear):
+                module.scale = torch.nn.Parameter(module.scale.detach().float(), requires_grad=True)
+                module.offset = torch.nn.Parameter(module.offset.detach().float(), requires_grad=True)
 
     teacher = AutoModelForCausalLM.from_pretrained(
         teacher_model_id,

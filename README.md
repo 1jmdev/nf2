@@ -52,13 +52,13 @@ huggingface-cli login
 ## Convert Llama 3.2 1B
 
 ```bash
-python examples/llama32-1b.py convert --output-dir outputs/llama32-1b-nf2
+python examples/llama32-1b.py convert --output-dir outputs/llama32-1b-nf2 --block-size 16 --quant-iters 5
 ```
 
 Equivalent CLI:
 
 ```bash
-nf2 convert --model-id meta-llama/Llama-3.2-1B --output-dir outputs/llama32-1b-nf2
+nf2 convert --model-id meta-llama/Llama-3.2-1B --output-dir outputs/llama32-1b-nf2 --block-size 16 --quant-iters 5
 ```
 
 By default the converter quantizes all `torch.nn.Linear` layers except `lm_head`. It stores:
@@ -81,9 +81,16 @@ python examples/llama32-1b.py recover \
   --model-dir outputs/llama32-1b-nf2 \
   --output-dir outputs/llama32-1b-nf2-plus \
   --target-bytes 50000000 \
-  --max-steps 1000 \
-  --lora-rank 8
+  --max-steps 3000 \
+  --sequence-length 512 \
+  --lora-rank 16 \
+  --lora-alpha 32 \
+  --top-k 256 \
+  --ce-weight 0.1 \
+  --refine-scale-offset
 ```
+
+`--refine-scale-offset` keeps the 2-bit indices frozen but lets the per-block scale and offset adapt during recovery. This is still full NF2: no transformer projection layers are kept in BF16, and only `lm_head` is skipped by default.
 
 For a quick smoke run, use fewer bytes and steps:
 
@@ -114,7 +121,7 @@ from nf2 import NF2Config, convert_model_to_nf2, save_nf2_model
 
 model_id = "meta-llama/Llama-3.2-1B"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 config = NF2Config(base_model_id=model_id)
 converted = convert_model_to_nf2(model, config=config, skip_modules=("lm_head",))
