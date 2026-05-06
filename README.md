@@ -19,10 +19,10 @@ The implementation is correctness-first and uses normal PyTorch modules. It does
 NF2 stores each weight as a 2-bit index into this normalized codebook:
 
 ```python
-[-1.0, -0.254917, 0.254917, 1.0]
+[-1.271, -0.324, 0.324, 1.271]
 ```
 
-These are the quartile conditional means `[-1.271, -0.324, 0.324, 1.271]` normalized by their absolute maximum. With absmax block scaling, this normalized codebook is required to avoid reconstructing values outside the block range.
+These are the quartile conditional means of a standard normal distribution. NF2 fits each block's scale and offset with a small alternating least-squares loop, instead of forcing the scale to be absmax. That keeps the NormalFloat codebook shape while avoiding the destructive overshoot problem of using unnormalized NF2 values with fixed absmax scaling.
 
 Weights are grouped into blocks of 64. Each block stores an FP16 scale and FP16 offset.
 

@@ -46,6 +46,31 @@ def generate(args: argparse.Namespace) -> None:
     print(generate_text(model, tokenizer, args.prompt, args.max_new_tokens, args.temperature, args.top_p, args.device))
 
 
+@torch.no_grad()
+def compare(args: argparse.Namespace) -> None:
+    dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float16
+    student, tokenizer = load_nf2_model(args.model_dir, device=args.device, dtype=args.dtype)
+    teacher = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=dtype).to(args.device).eval()
+    student.eval()
+    batch = tokenizer(args.prompt, return_tensors="pt").to(args.device)
+    teacher_logits = teacher(**batch).logits[:, -1, :].float()
+    student_logits = student(**batch).logits[:, -1, :].float()
+    kl = torch.nn.functional.kl_div(
+        torch.log_softmax(student_logits, dim=-1),
+        torch.softmax(teacher_logits, dim=-1),
+        reduction="batchmean",
+    )
+    teacher_top = torch.topk(torch.softmax(teacher_logits, dim=-1), args.top_k)
+    student_top = torch.topk(torch.softmax(student_logits, dim=-1), args.top_k)
+    print(f"next-token KL: {float(kl):.4f}")
+    print("teacher top tokens:")
+    for prob, idx in zip(teacher_top.values[0], teacher_top.indices[0]):
+        print(f"  {tokenizer.decode([int(idx)])!r}: {float(prob):.4f}")
+    print("student top tokens:")
+    for prob, idx in zip(student_top.values[0], student_top.indices[0]):
+        print(f"  {tokenizer.decode([int(idx)])!r}: {float(prob):.4f}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Llama 3.2 1B NF2 pipeline example")
     sub = parser.add_subparsers(required=True)
@@ -83,6 +108,15 @@ def main() -> None:
     g.add_argument("--temperature", type=float, default=0.7)
     g.add_argument("--top-p", type=float, default=0.95)
     g.set_defaults(func=generate)
+
+    cmp = sub.add_parser("compare")
+    cmp.add_argument("--model-id", default=MODEL_ID)
+    cmp.add_argument("--model-dir", default="outputs/llama32-1b-nf2-plus")
+    cmp.add_argument("--prompt", default="Gravity is ")
+    cmp.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    cmp.add_argument("--dtype", choices=["bfloat16", "float16"], default="bfloat16")
+    cmp.add_argument("--top-k", type=int, default=10)
+    cmp.set_defaults(func=compare)
 
     args = parser.parse_args()
     args.func(args)

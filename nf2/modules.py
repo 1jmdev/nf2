@@ -51,7 +51,12 @@ class NF2Linear(nn.Module):
             config=config,
             compute_dtype=compute_dtype,
         )
-        q = quantize_nf2(linear.weight.data, block_size=layer.block_size, codebook=layer.codebook)
+        q = quantize_nf2(
+            linear.weight.data,
+            block_size=layer.block_size,
+            codebook=layer.codebook,
+            quant_iters=(config or NF2Config()).quant_iters,
+        )
         layer.qweight = q["qweight"]
         layer.scale = nn.Parameter(q["scale"], requires_grad=False)
         layer.offset = nn.Parameter(q["offset"], requires_grad=False)

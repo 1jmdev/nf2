@@ -4,9 +4,8 @@ import math
 
 import torch
 
-# Quartile conditional means of N(0, 1), normalized by absmax so block values
-# reconstructed after absmax scaling cannot overshoot the original block range.
-NF2_CODEBOOK = torch.tensor([-1.0, -0.254917, 0.254917, 1.0], dtype=torch.float32)
+# Conditional means of the four equal-probability bins of N(0, 1).
+NF2_CODEBOOK = torch.tensor([-1.271, -0.324, 0.324, 1.271], dtype=torch.float32)
 
 
 def pack_2bit(indices: torch.Tensor) -> torch.Tensor:
@@ -44,8 +43,14 @@ def quantize_nf2(
     weight: torch.Tensor,
     block_size: int = 64,
     codebook: torch.Tensor | None = None,
+    quant_iters: int = 3,
 ) -> dict[str, torch.Tensor | tuple[int, ...] | int]:
-    """Quantize a weight tensor to NF2 indices plus per-block scale and offset."""
+    """Quantize a weight tensor to NF2 indices plus per-block scale and offset.
+
+    The block scale/offset are fitted by alternating assignment to the NF2
+    codebook and least-squares reconstruction. This is much less destructive
+    than fixed absmax scaling at 2-bit precision.
+    """
 
     if block_size <= 0:
         raise ValueError("block_size must be positive")
@@ -54,11 +59,22 @@ def quantize_nf2(
     flat = weight.detach().to(torch.float32).flatten()
     blocks, pad = _pad_blocks(flat, block_size)
     offsets = blocks.mean(dim=1)
-    centered = blocks - offsets[:, None]
-    scales = centered.abs().amax(dim=1).clamp_min(1e-8)
-    normalized = centered / scales[:, None]
-    distances = (normalized[..., None] - codebook.view(1, 1, 4)).abs()
-    indices = distances.argmin(dim=-1).to(torch.uint8).flatten()
+    scales = blocks.std(dim=1, unbiased=False).clamp_min(1e-8)
+    block_indices = torch.zeros_like(blocks, dtype=torch.long)
+    for _ in range(max(1, quant_iters)):
+        normalized = (blocks - offsets[:, None]) / scales[:, None]
+        distances = (normalized[..., None] - codebook.view(1, 1, 4)).square()
+        block_indices = distances.argmin(dim=-1)
+        assigned = codebook[block_indices]
+        assigned_mean = assigned.mean(dim=1)
+        block_mean = blocks.mean(dim=1)
+        assigned_centered = assigned - assigned_mean[:, None]
+        block_centered = blocks - block_mean[:, None]
+        denom = assigned_centered.square().sum(dim=1).clamp_min(1e-8)
+        scales = (assigned_centered * block_centered).sum(dim=1) / denom
+        scales = scales.abs().clamp_min(1e-8)
+        offsets = block_mean - scales * assigned_mean
+    indices = block_indices.to(torch.uint8).flatten()
     if pad:
         indices = indices[:-pad]
     return {
